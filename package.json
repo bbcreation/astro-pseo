@@ -1,0 +1,49 @@
+{
+  "name": "astro-pseo",
+  "version": "1.0.0",
+  "description": "Astro integration that generates robots.txt, sitemap.xml, and llms.txt — and imports pSEO campaign archives.",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./config": "./src/config.js"
+  },
+  "bin": {
+    "astro-pseo": "./bin/astro-pseo.js"
+  },
+  "files": [
+    "src",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "astro",
+    "astro-integration",
+    "seo",
+    "sitemap",
+    "robots",
+    "llms.txt",
+    "pseo",
+    "programmatic-seo"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bbcreation/astro-pseo.git"
+  },
+  "homepage": "https://github.com/bbcreation/astro-pseo#readme",
+  "bugs": {
+    "url": "https://github.com/bbcreation/astro-pseo/issues"
+  },
+  "peerDependencies": {
+    "astro": "^4.0.0 || ^5.0.0"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.10",
+    "marked": "^12.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
