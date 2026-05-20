@@ -103,4 +103,17 @@ describe("collectAstroRoutes", () => {
     write("src/pages/learn/index.astro", "---");
     expect(collectAstroRoutes(tmpRoot).sort()).toEqual(["/learn"]);
   });
+
+  it("skips error pages, underscore-prefixed files and directories", () => {
+    write("src/pages/index.astro", "---");
+    write("src/pages/about.astro", "---");
+    write("src/pages/404.astro", "---");
+    write("src/pages/500.astro", "---");
+    write("src/pages/_partial.astro", "---");
+    write("src/pages/_components/widget.astro", "---");
+    write("src/pages/[slug].astro", "---");
+
+    const routes = collectAstroRoutes(tmpRoot).sort();
+    expect(routes).toEqual(["/", "/about"]);
+  });
 });

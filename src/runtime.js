@@ -94,6 +94,7 @@ export function collectAstroRoutes(root) {
 
 function walk(dir, urlPrefix, out) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name.startsWith("_")) continue;
     if (entry.isDirectory()) {
       if (/\[.*\]/.test(entry.name)) continue;
       walk(path.join(dir, entry.name), `${urlPrefix}/${entry.name}`, out);
@@ -102,6 +103,7 @@ function walk(dir, urlPrefix, out) {
     if (!/\.(astro|md|mdx)$/.test(entry.name)) continue;
     if (/\[.*\]/.test(entry.name)) continue;
     const base = entry.name.replace(/\.(astro|md|mdx)$/, "");
+    if (base === "404" || base === "500") continue;
     const url = base === "index" ? (urlPrefix || "/") : `${urlPrefix}/${base}`;
     out.push(url);
   }
