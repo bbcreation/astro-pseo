@@ -1,28 +1,36 @@
 import fs from "node:fs";
 import path from "node:path";
+import { DEFAULT_FIELD_MAP } from "./config.js";
+
+export { DEFAULT_FIELD_MAP };
+
+const FOLDERS = ["pillar", "supporting", "research"];
 
 /**
  * Walk the configured contentDir and return a flat list of page descriptors.
- * Recognised folders: pillar, supporting, research. Filenames map to slugs.
+ * Recognised folders: pillar, supporting, research. Filenames map to slugs
+ * when no `slug` frontmatter key is present.
  *
- * Front matter is parsed naively (no YAML lib dep): only top-level scalar
- * key: value pairs are read. This matches what pSEO writes.
+ * Frontmatter is parsed without a YAML dependency: top-level scalar
+ * `key: value` and inline-array `key: [a, b, c]` entries are recognised.
+ * Other syntaxes (nested objects, block scalars) are ignored.
  *
- * @param {string} root            Astro project root (absolute)
- * @param {string} contentDir      Relative to root, e.g. "src/content/pseo"
- * @returns {Array<{slug: string, type: string, title: string, description: string, updatedAt: string|null, raw: string}>}
+ * @param {string} root                          Astro project root (absolute)
+ * @param {string} contentDir                    Relative to root, e.g. "src/content/pseo"
+ * @param {Partial<typeof DEFAULT_FIELD_MAP>} [fieldMap]  Logical-field → frontmatter-key mapping.
+ * @returns {Array<{slug: string, type: string, title: string, description: string, updatedAt: string|null, tags: string[], raw: string}>}
  */
-export function collectPages(root, contentDir) {
+export function collectPages(root, contentDir, fieldMap) {
+  const map = { ...DEFAULT_FIELD_MAP, ...(fieldMap ?? {}) };
   const absRoot = path.resolve(root, contentDir);
 
   if (!fs.existsSync(absRoot)) {
     return [];
   }
 
-  const folders = ["pillar", "supporting", "research"];
   const out = [];
 
-  for (const folder of folders) {
+  for (const folder of FOLDERS) {
     const dir = path.join(absRoot, folder);
 
     if (!fs.existsSync(dir)) {
@@ -34,16 +42,20 @@ export function collectPages(root, contentDir) {
         continue;
       }
 
-      const slug = file.replace(/\.md$/, "");
+      const filenameSlug = file.replace(/\.md$/, "");
       const raw = fs.readFileSync(path.join(dir, file), "utf8");
       const fm = parseFrontMatter(raw);
 
       out.push({
-        slug: fm.slug || slug,
+        slug: stringField(fm, map.slug) || filenameSlug,
         type: folder,
-        title: fm.title || slug,
-        description: fm.meta_description || fm.focus_keyword || "",
-        updatedAt: fm.updated_at || fm.created_at || null,
+        title: stringField(fm, map.title) || filenameSlug,
+        description:
+          stringField(fm, map.description) ||
+          stringField(fm, map.focusKeyword) ||
+          "",
+        updatedAt: stringField(fm, map.updatedAt) || null,
+        tags: arrayField(fm, "tags"),
         raw,
       });
     }
@@ -52,13 +64,26 @@ export function collectPages(root, contentDir) {
   return out;
 }
 
+function stringField(fm, key) {
+  const v = fm[key];
+  return typeof v === "string" ? v : "";
+}
+
+function arrayField(fm, key) {
+  const v = fm[key];
+  return Array.isArray(v) ? v : [];
+}
+
 /**
- * Minimal "scalar key: value" front matter parser. Handles quoted values.
+ * Minimal scalar + inline-array frontmatter parser.
+ *
+ *   title: "Hello"          → { title: "Hello" }
+ *   tags: [a, "b c", d]     → { tags: ["a", "b c", "d"] }
  *
  * @param {string} content
- * @returns {Record<string, string>}
+ * @returns {Record<string, string | string[]>}
  */
-function parseFrontMatter(content) {
+export function parseFrontMatter(content) {
   const match = /^---\s*\n([\s\S]*?)\n---/.exec(content);
 
   if (!match) {
@@ -74,16 +99,38 @@ function parseFrontMatter(content) {
       continue;
     }
 
-    let value = m[2].trim();
+    const key = m[1];
+    const rawValue = m[2].trim();
 
-    if (/^".*"$/.test(value)) {
-      value = value.slice(1, -1).replace(/\\"/g, '"');
-    } else if (/^'.*'$/.test(value)) {
-      value = value.slice(1, -1);
+    const arrayMatch = /^\[(.*)\]$/.exec(rawValue);
+
+    if (arrayMatch) {
+      result[key] = parseInlineArray(arrayMatch[1]);
+      continue;
     }
 
-    result[m[1]] = value;
+    result[key] = unquote(rawValue);
   }
 
   return result;
+}
+
+function unquote(value) {
+  if (/^".*"$/.test(value)) {
+    return value.slice(1, -1).replace(/\\"/g, '"');
+  }
+  if (/^'.*'$/.test(value)) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
+function parseInlineArray(inner) {
+  if (!inner.trim()) {
+    return [];
+  }
+  return inner
+    .split(",")
+    .map((item) => unquote(item.trim()))
+    .filter((item) => item.length > 0);
 }
