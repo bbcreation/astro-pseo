@@ -118,6 +118,26 @@ export default definePseoConfig({
 Only the keys you provide are overridden; everything else falls back to the
 defaults. Values must be non-empty strings.
 
+### Importer × frontmatter mapping (v2.0 caveat)
+
+The importer (`astro-pseo import`, upload panel) writes hardcoded Laravel
+pSEO field names regardless of your `frontmatter` map: `meta_description`,
+`focus_keyword`, `updated_at`, `slug`, `title`.
+
+If you remap any of these in your `pseo.config.mjs` (e.g.
+`description: "lede"`), imported pages will have **empty fields** because
+the plugin will look for `lede:` but the importer wrote `meta_description:`.
+
+Two options:
+
+1. **Keep defaults** — match your project's frontmatter to Laravel pSEO
+   field names. Simplest if you control source markdown.
+2. **Pre-transform** — rename fields in the imported `.md` files after
+   `astro-pseo import` (a small sed/script step).
+
+A future v2.1 may add an optional `--fieldMap` flag to the importer to
+honour your `pseo.config.mjs` mapping at write-time.
+
 ## Sitemap
 
 Defaults to a single `/sitemap.xml` covering:
