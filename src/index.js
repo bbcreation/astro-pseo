@@ -177,6 +177,21 @@ function injectOutputRoute(injectRoute, pattern, kind, config, prerender) {
 }
 
 /**
+ * Serialize the config object for inlining into a generated route entrypoint.
+ * Strips `uploadPassword` unless explicitly opted in, so the secret never
+ * lands in static prerender output or in modules read by client-side code.
+ *
+ * @param {import('./config.js').PseoConfig} config
+ * @param {{ includeUploadPassword?: boolean }} [options]
+ * @returns {string} JSON literal suitable for embedding in source.
+ */
+export function serializeConfigForRoute(config, options = {}) {
+  if (options.includeUploadPassword) return JSON.stringify(config);
+  const { uploadPassword: _omit, ...safe } = config;
+  return JSON.stringify(safe);
+}
+
+/**
  * Write a tiny per-kind virtual module that exports a `GET()` returning a
  * Response. Astro picks it up via `injectRoute`; in static mode the same
  * endpoint runs once at build and its body is emitted as the static file.
@@ -184,7 +199,7 @@ function injectOutputRoute(injectRoute, pattern, kind, config, prerender) {
 function virtualEntrypoint(kind, config, prerender) {
   const cacheDir = ensureCacheDir();
   const filePath = path.join(cacheDir, `${kind}.js`);
-  const configLiteral = JSON.stringify(config);
+  const configLiteral = serializeConfigForRoute(config);
   const prerenderLine = prerender ? "export const prerender = true;\n" : "export const prerender = false;\n";
 
   const source = `${prerenderLine}import { renderOutput } from "astro-pseo";
@@ -209,7 +224,7 @@ export async function GET() {
 function uploadEntrypoint(config) {
   const cacheDir = ensureCacheDir();
   const filePath = path.join(cacheDir, "upload.js");
-  const configLiteral = JSON.stringify(config);
+  const configLiteral = serializeConfigForRoute(config, { includeUploadPassword: true });
 
   const source = `import { handleUploadGet, handleUploadPost } from "astro-pseo";
 export const prerender = false;
@@ -225,7 +240,7 @@ export async function POST(context) { return handleUploadPost(context, CONFIG); 
 function learnIndexEntrypoint(config) {
   const cacheDir = ensureCacheDir();
   const filePath = path.join(cacheDir, "learn-index.js");
-  const configLiteral = JSON.stringify(config);
+  const configLiteral = serializeConfigForRoute(config);
   fs.writeFileSync(
     filePath,
     `import { handleLearnIndex } from "astro-pseo";
@@ -241,7 +256,7 @@ export async function GET(context) { return handleLearnIndex(context, CONFIG); }
 function learnShowEntrypoint(config) {
   const cacheDir = ensureCacheDir();
   const filePath = path.join(cacheDir, "learn-show.js");
-  const configLiteral = JSON.stringify(config);
+  const configLiteral = serializeConfigForRoute(config);
   fs.writeFileSync(
     filePath,
     `import { handleLearnShow } from "astro-pseo";
@@ -258,7 +273,7 @@ function emitConfigModule(cacheDir, config) {
   const filePath = path.join(cacheDir, "_config.js");
   fs.writeFileSync(
     filePath,
-    `export const CONFIG = ${JSON.stringify(config)};\n`,
+    `export const CONFIG = ${serializeConfigForRoute(config)};\n`,
     "utf8",
   );
   return filePath;
