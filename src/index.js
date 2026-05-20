@@ -73,6 +73,12 @@ export default function astroPseo(inlineConfig) {
             entrypoint: uploadEntrypoint(config),
           });
           logger.info(`astro-pseo: upload panel at ${uploadPattern}`);
+          if (prerender) {
+            logger.warn(
+              "astro-pseo: upload panel is SSR-only — configure an Astro adapter " +
+                "(or unset uploadPassword for pure static).",
+            );
+          }
         }
 
         if (config.contentRoutes !== false) {
