@@ -35,33 +35,31 @@ export function buildRobotsTxt(config) {
 }
 
 /**
- * Build sitemap.xml content from a list of pages plus the site root.
+ * Build sitemap.xml content combining the home page, pSEO articles, optional
+ * static Astro routes from `src/pages/**`, and user-supplied additional paths.
+ * Entries are deduplicated by `<loc>` — first occurrence wins so explicit
+ * pSEO entries override generic Astro-route entries when slugs collide.
  *
  * @param {import('./config.js').PseoConfig} config
  * @param {Array<{slug: string, type: string, updatedAt: string|null}>} pages
- * @param {string[]} [extraPaths] Extra absolute paths (relative to site root)
+ * @param {string[]} [astroRoutes]      Paths from `collectAstroRoutes`. Defaults to none.
+ * @param {string[]} [additionalPages]  Extra absolute paths. Defaults to none.
  * @returns {string}
  */
-export function buildSitemapXml(config, pages, extraPaths = []) {
+export function buildSitemapXml(
+  config,
+  pages,
+  astroRoutes = [],
+  additionalPages = [],
+) {
   const site = trimTrailingSlash(config.site);
   const today = new Date().toISOString().slice(0, 10);
+  const linkPrefix = (config.linkPrefix || "/learn").replace(/\/$/, "");
 
+  const seen = new Set();
   const entries = [];
 
-  entries.push(
-    urlEntry(`${site}/`, today, config.sitemap.changefreqDefault, 1.0),
-  );
-
-  for (const extra of extraPaths) {
-    entries.push(
-      urlEntry(
-        `${site}${ensureLeadingSlash(extra)}`,
-        today,
-        config.sitemap.changefreqDefault,
-        config.sitemap.priorityDefault,
-      ),
-    );
-  }
+  pushEntry(entries, seen, `${site}/`, today, config.sitemap.changefreqDefault, 1.0);
 
   for (const page of pages) {
     const isPillar = page.type === "pillar";
@@ -73,7 +71,36 @@ export function buildSitemapXml(config, pages, extraPaths = []) {
       : config.sitemap.priorityDefault;
     const lastmod = (page.updatedAt || "").slice(0, 10) || today;
 
-    entries.push(urlEntry(`${site}/${page.slug}`, lastmod, changefreq, priority));
+    pushEntry(
+      entries,
+      seen,
+      `${site}${linkPrefix}/${page.slug}`,
+      lastmod,
+      changefreq,
+      priority,
+    );
+  }
+
+  for (const route of astroRoutes) {
+    pushEntry(
+      entries,
+      seen,
+      `${site}${ensureLeadingSlash(route)}`,
+      today,
+      config.sitemap.changefreqDefault,
+      config.sitemap.priorityDefault,
+    );
+  }
+
+  for (const extra of additionalPages) {
+    pushEntry(
+      entries,
+      seen,
+      `${site}${ensureLeadingSlash(extra)}`,
+      today,
+      config.sitemap.changefreqDefault,
+      config.sitemap.priorityDefault,
+    );
   }
 
   return [
@@ -93,6 +120,7 @@ export function buildSitemapXml(config, pages, extraPaths = []) {
  */
 export function buildLlmsTxt(config, pages) {
   const site = trimTrailingSlash(config.site);
+  const linkPrefix = (config.linkPrefix || "/learn").replace(/\/$/, "");
   const lines = [];
 
   lines.push(`# ${config.llms.name || hostFromUrl(config.site)}`);
@@ -115,7 +143,7 @@ export function buildLlmsTxt(config, pages) {
 
     for (const page of matches) {
       const desc = page.description ? `: ${page.description}` : "";
-      lines.push(`- [${page.title}](${site}/${page.slug})${desc}`);
+      lines.push(`- [${page.title}](${site}${linkPrefix}/${page.slug})${desc}`);
     }
 
     lines.push("");
@@ -126,6 +154,12 @@ export function buildLlmsTxt(config, pages) {
   lines.push(`- [Sitemap](${site}/sitemap.xml): XML sitemap of all pages`);
 
   return lines.join("\n") + "\n";
+}
+
+function pushEntry(entries, seen, loc, lastmod, changefreq, priority) {
+  if (seen.has(loc)) return;
+  seen.add(loc);
+  entries.push(urlEntry(loc, lastmod, changefreq, priority));
 }
 
 function urlEntry(loc, lastmod, changefreq, priority) {

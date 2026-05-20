@@ -1,75 +1,4 @@
-import fs from "node:fs";
-import path from "node:path";
-import { marked } from "marked";
-
-const SECTION_LABELS = {
-  pillar: "Guides",
-  supporting: "Articles",
-  research: "Research",
-};
-
-const GRID_COLS = {
-  pillar: "grid-cols-1 sm:grid-cols-2",
-  supporting: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
-  research: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
-};
-
-function readPages(root, contentDir) {
-  const pages = [];
-  const base = path.resolve(root, contentDir);
-
-  for (const type of ["pillar", "supporting", "research"]) {
-    const dir = path.join(base, type);
-    if (!fs.existsSync(dir)) continue;
-
-    for (const file of fs.readdirSync(dir)) {
-      if (!file.endsWith(".md")) continue;
-      const raw = fs.readFileSync(path.join(dir, file), "utf8");
-      const fm = parseFrontMatter(raw);
-      pages.push({
-        slug: fm.slug || file.replace(/\.md$/, ""),
-        type,
-        title: fm.title || file.replace(/\.md$/, ""),
-        description: fm.meta_description || fm.focus_keyword || "",
-        updatedAt: fm.updated_at || fm.created_at || null,
-        raw,
-      });
-    }
-  }
-
-  return pages;
-}
-
-function renderArticle(raw) {
-  const body = raw.replace(/^---\s*\n[\s\S]*?\n---\s*\n/, "");
-  let html = marked.parse(body);
-  html = sanitizeHtml(html);
-  html = html.replace(/<h1[^>]*>[\s\S]*?<\/h1>\s*/gi, "");
-  html = html.replace(/(<li[^>]*>)\s*\[[ xX]\]\s*/gi, "$1");
-  return html;
-}
-
-function sanitizeHtml(html) {
-  return html
-    .replace(/\bon\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, "")
-    .replace(/href\s*=\s*["']?\s*javascript\s*:/gi, 'href="about:')
-    .replace(/src\s*=\s*["']?\s*data\s*:/gi, 'src="about:');
-}
-
-function parseFrontMatter(content) {
-  const match = /^---\s*\n([\s\S]*?)\n---/.exec(content);
-  if (!match) return {};
-  const result = {};
-  for (const line of match[1].split("\n")) {
-    const m = /^(\w[\w_]*):\s*(.*)$/.exec(line);
-    if (!m) continue;
-    let v = m[2].trim();
-    if (/^"(.*)"$/.test(v)) v = v.slice(1, -1).replace(/\\"/g, '"');
-    else if (/^'(.*)'$/.test(v)) v = v.slice(1, -1);
-    result[m[1]] = v;
-  }
-  return result;
-}
+import { collectPages, renderArticle, renderIndex } from "./runtime.js";
 
 const ADAPTIVE_CSS = `
 <style>
@@ -134,7 +63,7 @@ function escHtml(s) {
 
 export function handleLearnIndex(context, config) {
   const root = process.cwd();
-  const all = readPages(root, config.contentDir);
+  const all = collectPages(root, config.contentDir, config.frontmatter);
   const perPage = config.perPage || 15;
   const currentPage = Math.max(1, parseInt(context.url.searchParams.get("page") || "1", 10));
   const total = all.length;
@@ -145,36 +74,11 @@ export function handleLearnIndex(context, config) {
   const paged = all.slice((currentPage - 1) * perPage, currentPage * perPage);
   const linkPrefix = (config.linkPrefix || "/learn").replace(/\/$/, "");
 
-  const sections = ["pillar", "supporting", "research"];
-  let sectionsHtml = "";
-
-  for (const type of sections) {
-    const items = paged.filter((p) => p.type === type);
-    if (!items.length) continue;
-    const cols = type === "pillar" ? "pseo-grid-2" : "pseo-grid-3";
-    const cards = items.map((p) => `
-      <a href="${linkPrefix}/${escHtml(p.slug)}" class="pseo-card">
-        <div class="pseo-card-title">${escHtml(p.title)}</div>
-        ${p.description ? `<div class="pseo-card-desc">${escHtml(p.description)}</div>` : ""}
-      </a>`).join("");
-    sectionsHtml += `
-    <div class="pseo-section">
-      <div class="pseo-section-label">${SECTION_LABELS[type]}</div>
-      <div class="pseo-grid ${cols}">${cards}</div>
-    </div>`;
-  }
-
-  if (!sectionsHtml) {
-    sectionsHtml = `<p class="pseo-empty">No articles imported yet.</p>`;
-  }
-
   const pagination = totalPages > 1 ? renderPagination(context.url.pathname, currentPage, totalPages) : "";
+  const inner = renderIndex(paged, { linkPrefix, append: pagination });
 
   const html = `${renderHead("Articles")}
-<div class="pseo-wrap">
-${sectionsHtml}
-${pagination}
-</div>
+${inner}
 </body></html>`;
 
   return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
@@ -185,7 +89,7 @@ export function handleLearnShow(context, config, slug) {
   if (!/^[a-z0-9][a-z0-9_-]*$/.test(slug)) {
     return new Response("Not found", { status: 404 });
   }
-  const all = readPages(root, config.contentDir);
+  const all = collectPages(root, config.contentDir, config.frontmatter);
   const page = all.find((p) => p.slug === slug);
   const linkPrefix = (config.linkPrefix || "/learn").replace(/\/$/, "");
 
