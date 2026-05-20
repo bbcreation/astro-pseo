@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { resolveConfig } from "./config.js";
+import { resolveConfig, DEFAULTS } from "./config.js";
 import { collectPages } from "./pages.js";
 import { collectAstroRoutes } from "./runtime.js";
 import {
@@ -44,7 +44,7 @@ export default function astroPseo(inlineConfig) {
         const prerender = config.prerender !== false;
         const linkPrefix = (config.linkPrefix || "/learn").replace(/\/$/, "");
 
-        if (prerender && config.perPage !== 15) {
+        if (prerender && config.perPage !== DEFAULTS.perPage) {
           logger.warn(
             "astro-pseo: perPage is ignored when prerender is true. Switch to prerender: false for paginated SSR, or accept single-page index.",
           );
