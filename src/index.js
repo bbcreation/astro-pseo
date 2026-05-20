@@ -3,6 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { resolveConfig } from "./config.js";
 import { collectPages } from "./pages.js";
+import { collectAstroRoutes } from "./runtime.js";
 import {
   buildRobotsTxt,
   buildSitemapXml,
@@ -10,6 +11,9 @@ import {
 } from "./generators.js";
 export { handleUploadGet, handleUploadPost } from "./upload.js";
 export { handleLearnIndex, handleLearnShow } from "./learn.js";
+export { collectAstroRoutes } from "./runtime.js";
+
+const DEFAULT_LAYOUT_SPECIFIER = "astro-pseo/templates/defaultLayout.astro";
 
 /**
  * Astro integration entry point.
@@ -17,7 +21,7 @@ export { handleLearnIndex, handleLearnShow } from "./learn.js";
  * Usage in astro.config.mjs:
  *
  *   import astroPseo from "astro-pseo";
- *   import pseoConfig from "./pseo.config.ts";
+ *   import pseoConfig from "./pseo.config.mjs";
  *
  *   export default defineConfig({
  *     integrations: [astroPseo(pseoConfig)],
@@ -37,25 +41,27 @@ export default function astroPseo(inlineConfig) {
         const userConfig = inlineConfig ?? (await loadConfigFile(rootPath, logger));
         const config = resolveConfig(userConfig ?? {});
 
+        const prerender = config.prerender !== false;
+        const linkPrefix = (config.linkPrefix || "/learn").replace(/\/$/, "");
+
+        if (prerender && config.perPage !== 15) {
+          logger.warn(
+            "astro-pseo: perPage is ignored when prerender is true. Switch to prerender: false for paginated SSR, or accept single-page index.",
+          );
+        }
+
+        const layoutSpecifier = resolveLayoutSpecifier(config, rootPath);
+
         if (config.outputs.robots !== false) {
-          injectRoute({
-            pattern: "/robots.txt",
-            entrypoint: virtualEntrypoint("robots", config),
-          });
+          injectOutputRoute(injectRoute, "/robots.txt", "robots", config, prerender);
         }
 
         if (config.outputs.sitemap !== false) {
-          injectRoute({
-            pattern: "/sitemap.xml",
-            entrypoint: virtualEntrypoint("sitemap", config),
-          });
+          injectOutputRoute(injectRoute, "/sitemap.xml", "sitemap", config, prerender);
         }
 
         if (config.outputs.llms !== false) {
-          injectRoute({
-            pattern: "/llms.txt",
-            entrypoint: virtualEntrypoint("llms", config),
-          });
+          injectOutputRoute(injectRoute, "/llms.txt", "llms", config, prerender);
         }
 
         if (config.uploadPassword) {
@@ -70,22 +76,33 @@ export default function astroPseo(inlineConfig) {
         }
 
         if (config.contentRoutes !== false) {
-          const linkPrefix = (config.linkPrefix || "/learn").replace(/\/$/, "");
-          injectRoute({
-            pattern: linkPrefix,
-            entrypoint: learnIndexEntrypoint(config),
-          });
-          injectRoute({
-            pattern: `${linkPrefix}/[slug]`,
-            entrypoint: learnShowEntrypoint(config),
-          });
-          logger.info(`astro-pseo: article routes at ${linkPrefix} and ${linkPrefix}/[slug]`);
+          if (prerender) {
+            const cacheDir = ensureCacheDir();
+            const configModule = emitConfigModule(cacheDir, config);
+            const indexFile = emitLearnIndexAstro(cacheDir, layoutSpecifier, configModule);
+            const showFile = emitLearnShowAstro(cacheDir, layoutSpecifier, configModule);
+            injectRoute({ pattern: linkPrefix, entrypoint: indexFile, prerender: true });
+            injectRoute({ pattern: `${linkPrefix}/[slug]`, entrypoint: showFile, prerender: true });
+          } else {
+            injectRoute({
+              pattern: linkPrefix,
+              entrypoint: learnIndexEntrypoint(config),
+            });
+            injectRoute({
+              pattern: `${linkPrefix}/[slug]`,
+              entrypoint: learnShowEntrypoint(config),
+            });
+          }
+          logger.info(
+            `astro-pseo: article routes at ${linkPrefix} and ${linkPrefix}/[slug] (${prerender ? "static" : "SSR"})`,
+          );
         }
 
         logger.info(
           `astro-pseo: serving${config.outputs.robots ? " /robots.txt" : ""}` +
             `${config.outputs.sitemap ? " /sitemap.xml" : ""}` +
-            `${config.outputs.llms ? " /llms.txt" : ""}`,
+            `${config.outputs.llms ? " /llms.txt" : ""}` +
+            ` (${prerender ? "static" : "SSR"})`,
         );
       },
     },
@@ -94,7 +111,7 @@ export default function astroPseo(inlineConfig) {
 
 /**
  * Synchronously render output by name. Exposed so the optional
- * `astro-pseo build` CLI (and tests) can produce files directly without
+ * `astro-pseo build` CLI and tests can produce files directly without
  * routing through Astro.
  *
  * @param {"robots"|"sitemap"|"llms"} kind
@@ -107,10 +124,17 @@ export function renderOutput(kind, root, config) {
     return buildRobotsTxt(config);
   }
 
-  const pages = collectPages(root, config.contentDir);
+  const pages = collectPages(root, config.contentDir, config.frontmatter);
 
   if (kind === "sitemap") {
-    return buildSitemapXml(config, pages);
+    const astroRoutes = config.sitemap.includeAstroRoutes
+      ? collectAstroRoutes(root)
+      : [];
+    const additionalPages = [...config.sitemap.additionalPages];
+    if (config.contentRoutes !== false) {
+      additionalPages.unshift((config.linkPrefix || "/learn").replace(/\/$/, ""));
+    }
+    return buildSitemapXml(config, pages, astroRoutes, additionalPages);
   }
 
   if (kind === "llms") {
@@ -120,23 +144,50 @@ export function renderOutput(kind, root, config) {
   throw new Error(`Unknown output kind: ${kind}`);
 }
 
-/**
- * Write a tiny per-kind virtual module next to the user's Astro config that
- * exports a Response. We materialise it on disk because Astro's injectRoute
- * needs a real importable file path. The file is deterministic and idempotent.
- */
-function virtualEntrypoint(kind, config) {
-  const cacheDir = path.resolve(process.cwd(), "node_modules/.astro-pseo");
+function resolveLayoutSpecifier(config, rootPath) {
+  if (config.layout == null) {
+    return DEFAULT_LAYOUT_SPECIFIER;
+  }
+  const abs = path.resolve(rootPath, config.layout);
+  if (!fs.existsSync(abs)) {
+    throw new Error(
+      `[astro-pseo] config.layout points to a file that does not exist: ${abs}`,
+    );
+  }
+  return abs;
+}
 
+function ensureCacheDir() {
+  const cacheDir = path.resolve(process.cwd(), "node_modules/.astro-pseo");
   if (!fs.existsSync(cacheDir)) {
     fs.mkdirSync(cacheDir, { recursive: true });
   }
+  return cacheDir;
+}
 
+function injectOutputRoute(injectRoute, pattern, kind, config, prerender) {
+  const route = {
+    pattern,
+    entrypoint: virtualEntrypoint(kind, config, prerender),
+  };
+  if (prerender) {
+    route.prerender = true;
+  }
+  injectRoute(route);
+}
+
+/**
+ * Write a tiny per-kind virtual module that exports a `GET()` returning a
+ * Response. Astro picks it up via `injectRoute`; in static mode the same
+ * endpoint runs once at build and its body is emitted as the static file.
+ */
+function virtualEntrypoint(kind, config, prerender) {
+  const cacheDir = ensureCacheDir();
   const filePath = path.join(cacheDir, `${kind}.js`);
   const configLiteral = JSON.stringify(config);
+  const prerenderLine = prerender ? "export const prerender = true;\n" : "export const prerender = false;\n";
 
-  const source = `
-import { renderOutput } from "astro-pseo";
+  const source = `${prerenderLine}import { renderOutput } from "astro-pseo";
 
 const CONFIG = ${configLiteral};
 const KIND = ${JSON.stringify(kind)};
@@ -148,7 +199,7 @@ export async function GET() {
     headers: { "Content-Type": CONTENT_TYPE + "; charset=utf-8" },
   });
 }
-`.trimStart();
+`;
 
   fs.writeFileSync(filePath, source, "utf8");
 
@@ -156,53 +207,121 @@ export async function GET() {
 }
 
 function uploadEntrypoint(config) {
-  const cacheDir = path.resolve(process.cwd(), "node_modules/.astro-pseo");
-
-  if (!fs.existsSync(cacheDir)) {
-    fs.mkdirSync(cacheDir, { recursive: true });
-  }
-
+  const cacheDir = ensureCacheDir();
   const filePath = path.join(cacheDir, "upload.js");
   const configLiteral = JSON.stringify(config);
 
-  const source = `
-import { handleUploadGet, handleUploadPost } from "astro-pseo";
+  const source = `import { handleUploadGet, handleUploadPost } from "astro-pseo";
 export const prerender = false;
 const CONFIG = ${configLiteral};
 export async function GET(context) { return handleUploadGet(context, CONFIG); }
 export async function POST(context) { return handleUploadPost(context, CONFIG); }
-`.trimStart();
+`;
 
   fs.writeFileSync(filePath, source, "utf8");
   return filePath;
 }
 
 function learnIndexEntrypoint(config) {
-  const cacheDir = path.resolve(process.cwd(), "node_modules/.astro-pseo");
-  if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+  const cacheDir = ensureCacheDir();
   const filePath = path.join(cacheDir, "learn-index.js");
   const configLiteral = JSON.stringify(config);
-  fs.writeFileSync(filePath, `
-import { handleLearnIndex } from "astro-pseo";
+  fs.writeFileSync(
+    filePath,
+    `import { handleLearnIndex } from "astro-pseo";
 export const prerender = false;
 const CONFIG = ${configLiteral};
 export async function GET(context) { return handleLearnIndex(context, CONFIG); }
-`.trimStart(), "utf8");
+`,
+    "utf8",
+  );
   return filePath;
 }
 
 function learnShowEntrypoint(config) {
-  const cacheDir = path.resolve(process.cwd(), "node_modules/.astro-pseo");
-  if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+  const cacheDir = ensureCacheDir();
   const filePath = path.join(cacheDir, "learn-show.js");
   const configLiteral = JSON.stringify(config);
-  fs.writeFileSync(filePath, `
-import { handleLearnShow } from "astro-pseo";
+  fs.writeFileSync(
+    filePath,
+    `import { handleLearnShow } from "astro-pseo";
 export const prerender = false;
 const CONFIG = ${configLiteral};
 export async function GET(context) { return handleLearnShow(context, CONFIG, context.params.slug); }
-`.trimStart(), "utf8");
+`,
+    "utf8",
+  );
   return filePath;
+}
+
+function emitConfigModule(cacheDir, config) {
+  const filePath = path.join(cacheDir, "_config.js");
+  fs.writeFileSync(
+    filePath,
+    `export const CONFIG = ${JSON.stringify(config)};\n`,
+    "utf8",
+  );
+  return filePath;
+}
+
+function emitLearnIndexAstro(cacheDir, layoutSpecifier, configModule) {
+  const filePath = path.join(cacheDir, "learn-index.astro");
+  const layoutImport = importPath(layoutSpecifier, filePath);
+  const configImport = importPath(configModule, filePath);
+
+  const source = `---
+import Layout from ${JSON.stringify(layoutImport)};
+import { collectPages, renderIndex } from "astro-pseo/runtime";
+import { CONFIG } from ${JSON.stringify(configImport)};
+const pages = collectPages(process.cwd(), CONFIG.contentDir, CONFIG.frontmatter);
+const inner = renderIndex(pages, { linkPrefix: CONFIG.linkPrefix });
+---
+<Layout title="Articles">
+  <Fragment set:html={inner} />
+</Layout>
+`;
+
+  fs.writeFileSync(filePath, source, "utf8");
+  return filePath;
+}
+
+function emitLearnShowAstro(cacheDir, layoutSpecifier, configModule) {
+  const filePath = path.join(cacheDir, "learn-show.astro");
+  const layoutImport = importPath(layoutSpecifier, filePath);
+  const configImport = importPath(configModule, filePath);
+
+  const source = `---
+import Layout from ${JSON.stringify(layoutImport)};
+import { collectPages, renderArticle } from "astro-pseo/runtime";
+import { CONFIG } from ${JSON.stringify(configImport)};
+export async function getStaticPaths() {
+  const pages = collectPages(process.cwd(), CONFIG.contentDir, CONFIG.frontmatter);
+  return pages.map((p) => ({ params: { slug: p.slug }, props: { page: p } }));
+}
+const { page } = Astro.props;
+const linkPrefix = (CONFIG.linkPrefix || "/learn").replace(/\\/$/, "");
+const body = renderArticle(page.raw);
+---
+<Layout title={page.title} description={page.description}>
+  <div class="pseo-wrap">
+    <a class="pseo-back" href={linkPrefix}>← Articles</a>
+    <h1 class="pseo-h1">{page.title}</h1>
+    {page.updatedAt && <div class="pseo-meta">Updated: {page.updatedAt}</div>}
+    <div class="pseo-prose" set:html={body} />
+  </div>
+</Layout>
+`;
+
+  fs.writeFileSync(filePath, source, "utf8");
+  return filePath;
+}
+
+function importPath(specifier, fromFile) {
+  if (path.isAbsolute(specifier)) {
+    const rel = path.relative(path.dirname(fromFile), specifier);
+    return rel.startsWith(".") ? rel : `./${rel}`;
+  }
+  return specifier;
 }
 
 async function loadConfigFile(root, logger) {
