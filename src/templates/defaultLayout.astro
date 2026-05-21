@@ -1,0 +1,15 @@
+---
+import { ADAPTIVE_CSS } from "astro-pseo/css";
+const { title, description = "" } = Astro.props;
+---
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    {description && <meta name="description" content={description} />}
+    <style is:global set:html={ADAPTIVE_CSS} />
+  </head>
+  <body><slot /></body>
+</html>
