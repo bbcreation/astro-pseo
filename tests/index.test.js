@@ -58,7 +58,7 @@ describe("articleComponent", () => {
     const show = routes.find((r) => r.pattern.endsWith("/[slug]"));
     const src = fs.readFileSync(show.entrypoint, "utf8");
     expect(src).toContain("import Article from");
-    expect(src).toContain("<Article page={light(page)} body={body}");
+    expect(src).toContain("<Article page={pageLight} body={body}");
     expect(src).not.toContain('class="pseo-back"');
   });
 

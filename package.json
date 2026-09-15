@@ -1,6 +1,6 @@
 {
   "name": "astro-pseo",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Astro integration for programmatic SEO. Imports campaign archives, renders article pages at /learn, and keeps public/sitemap.xml, llms.txt, and robots.txt in sync.",
   "type": "module",
   "main": "./src/index.js",

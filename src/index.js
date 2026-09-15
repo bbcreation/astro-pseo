@@ -242,7 +242,7 @@ function emitLearnShowAstro(layoutSpecifier, configModule, articleSpecifier) {
   const articleImport = articleSpecifier ? importPath(articleSpecifier, filePath) : null;
 
   const articleMarkup = articleImport
-    ? `<Article page={light(page)} body={body} canonical={canonical} indexHref={indexHref} pages={pages} />`
+    ? `<Article page={pageLight} body={body} canonical={canonical} indexHref={indexHref} pages={pages} />`
     : `<div class="pseo-wrap">
     <a class="pseo-back" href={indexHref}>← Articles</a>
     <h1 class="pseo-h1">{page.title}</h1>
@@ -258,14 +258,16 @@ ${articleImport ? `import Article from ${JSON.stringify(articleImport)};` : ""}
 import { collectPages, buildArticleHtml, withTrailingSlash } from "astro-pseo/runtime";
 import { ADAPTIVE_CSS } from "astro-pseo/css";
 import { CONFIG } from ${JSON.stringify(configImport)};
-const light = ({ raw, ...rest }) => rest;
+// getStaticPaths is hoisted by Astro: it cannot see frontmatter variables,
+// so the light-descriptor helper lives inside it and is repeated below.
 export async function getStaticPaths() {
   const all = collectPages(process.cwd(), CONFIG.contentDir, CONFIG.frontmatter);
   // one shared light list (no markdown bodies) for related-content blocks
-  const pages = all.map(light);
+  const pages = all.map(({ raw, ...rest }) => rest);
   return all.map((p) => ({ params: { slug: p.slug }, props: { page: p, pages } }));
 }
 const { page, pages } = Astro.props;
+const { raw: _raw, ...pageLight } = page;
 const body = buildArticleHtml(page.raw);
 const canonical = new URL(withTrailingSlash(\`\${CONFIG.linkPrefix}/\${page.slug}\`, CONFIG.trailingSlash), CONFIG.site).toString();
 const indexHref = withTrailingSlash(CONFIG.linkPrefix, CONFIG.trailingSlash);
