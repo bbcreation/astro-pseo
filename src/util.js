@@ -47,6 +47,23 @@ export function normalizeLinkPrefix(prefix) {
 }
 
 /**
+ * Append a trailing slash to a URL path when `enabled` is true. Paths that
+ * look like files (`/sitemap.xml`) and paths that already end with a slash
+ * are returned unchanged. When `enabled` is false the input is returned
+ * untouched so existing sites keep their current URL shape.
+ *
+ * @param {string} p
+ * @param {boolean} enabled
+ * @returns {string}
+ */
+export function withTrailingSlash(p, enabled) {
+  if (!enabled || !p) return p;
+  if (p.endsWith("/")) return p;
+  if (/\.[a-z0-9]+$/i.test(p.split("/").pop())) return p;
+  return `${p}/`;
+}
+
+/**
  * Extract the `host` part of an absolute URL. Returns the raw input when
  * parsing fails — callers tolerate either a hostname or the original string.
  *

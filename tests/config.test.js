@@ -110,3 +110,15 @@ describe("resolveConfig — validation", () => {
     ).toThrow(/includeAstroRoutes/);
   });
 });
+
+describe("resolveConfig — trailingSlash", () => {
+  it("defaults to false", () => {
+    expect(resolveConfig({ site: "https://x.com" }).trailingSlash).toBe(false);
+  });
+
+  it("rejects non-boolean values", () => {
+    expect(() =>
+      resolveConfig({ site: "https://x.com", trailingSlash: "yes" }),
+    ).toThrow(/trailingSlash must be a boolean/);
+  });
+});

@@ -1,4 +1,4 @@
-import { escXml, hostFromUrl, normalizeLinkPrefix } from "./util.js";
+import { escXml, hostFromUrl, normalizeLinkPrefix, withTrailingSlash } from "./util.js";
 
 /**
  * Build robots.txt content from config rules. The Sitemap directive is
@@ -57,6 +57,7 @@ export function buildSitemapXml(
   const site = trimTrailingSlash(config.site);
   const today = new Date().toISOString().slice(0, 10);
   const linkPrefix = normalizeLinkPrefix(config.linkPrefix);
+  const slash = (p) => withTrailingSlash(p, config.trailingSlash);
 
   const seen = new Set();
   const entries = [];
@@ -76,7 +77,7 @@ export function buildSitemapXml(
     pushEntry(
       entries,
       seen,
-      `${site}${linkPrefix}/${page.slug}`,
+      `${site}${slash(`${linkPrefix}/${page.slug}`)}`,
       lastmod,
       changefreq,
       priority,
@@ -87,7 +88,7 @@ export function buildSitemapXml(
     pushEntry(
       entries,
       seen,
-      `${site}${ensureLeadingSlash(route)}`,
+      `${site}${slash(ensureLeadingSlash(route))}`,
       today,
       config.sitemap.changefreqDefault,
       config.sitemap.priorityDefault,
@@ -98,7 +99,7 @@ export function buildSitemapXml(
     pushEntry(
       entries,
       seen,
-      `${site}${ensureLeadingSlash(extra)}`,
+      `${site}${slash(ensureLeadingSlash(extra))}`,
       today,
       config.sitemap.changefreqDefault,
       config.sitemap.priorityDefault,
@@ -145,7 +146,8 @@ export function buildLlmsTxt(config, pages) {
 
     for (const page of matches) {
       const desc = page.description ? `: ${page.description}` : "";
-      lines.push(`- [${page.title}](${site}${linkPrefix}/${page.slug})${desc}`);
+      const href = withTrailingSlash(`${linkPrefix}/${page.slug}`, config.trailingSlash);
+      lines.push(`- [${page.title}](${site}${href})${desc}`);
     }
 
     lines.push("");

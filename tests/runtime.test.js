@@ -167,3 +167,24 @@ describe("collectAstroRoutes", () => {
     expect(routes).toEqual(["/", "/about"]);
   });
 });
+
+describe("trailingSlash", () => {
+  it("adds a slash to index card links", () => {
+    const html = buildIndexHtml(
+      [{ slug: "p", type: "pillar", title: "P", description: "" }],
+      { linkPrefix: "/learn", trailingSlash: true },
+    );
+    expect(html).toContain('href="/learn/p/"');
+  });
+
+  it("adds a slash to pagination links", () => {
+    const html = buildPaginationHtml({
+      currentPage: 2,
+      totalPages: 3,
+      linkPrefix: "/learn",
+      trailingSlash: true,
+    });
+    expect(html).toContain('<a href="/learn/">←</a>');
+    expect(html).toContain('<a href="/learn/p/3/">3</a>');
+  });
+});

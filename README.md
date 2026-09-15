@@ -63,7 +63,10 @@ importer also writes:
 
 Point `config.layout` at any Astro layout component (path relative to the
 project root). The component must include `<slot />` and accept `title` and
-`description` props.
+`description` props. The plugin also passes `canonical` (absolute URL of the
+page, respecting `trailingSlash`) and, for articles, `lastmod` (the
+`updated_at` frontmatter value) — use them for `<link rel="canonical">` and
+JSON-LD dates, or ignore them.
 
 ```js
 // pseo.config.mjs
@@ -194,6 +197,7 @@ needs SSR — configure an Astro adapter and set `output: "server"` or
 | `contentDir` | `string` | `"src/pseo"` | Root for `pillar/supporting/research`. Outside `src/content/` by default. |
 | `linkPrefix` | `string` | `"/learn"` | URL prefix for article routes and imported links. |
 | `perPage` | `number` | `24` | Articles per page on the index. Pages 2+ live at `${linkPrefix}/p/<n>`. |
+| `trailingSlash` | `boolean` | `false` | Emit `/learn/slug/` (with slash) in the sitemap, `llms.txt`, index/pagination links and imported markdown links. Turn on when your host serves `slug/index.html` and 301s `/slug` → `/slug/` (nginx, Apache, most static hosts) so crawlers never land on a redirect. |
 | `layout` | `string \| undefined` | built-in | Path (relative to root) of your Layout.astro. |
 | `frontmatter` | `Partial<FrontmatterMap>` | pSEO defaults | Logical-field → frontmatter-key map. |
 | `uploadPassword` | `string` | `""` | Empty = upload panel disabled. |

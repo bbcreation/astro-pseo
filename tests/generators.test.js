@@ -121,3 +121,41 @@ describe("buildLlmsTxt", () => {
     expect(out.startsWith("# example.com\n")).toBe(true);
   });
 });
+
+describe("trailingSlash", () => {
+  const pages = [
+    { slug: "foo", type: "pillar", updatedAt: "2026-04-01", title: "Foo", description: "" },
+  ];
+
+  it("appends a slash to article, route and additional URLs in the sitemap", () => {
+    const xml = buildSitemapXml(
+      makeConfig({ trailingSlash: true }),
+      pages,
+      ["/about", "/faq/"],
+      ["/learn", "/learn/foo"],
+    );
+    expect(xml).toContain("<loc>https://example.com/</loc>");
+    expect(xml).toContain("<loc>https://example.com/learn/foo/</loc>");
+    expect(xml).toContain("<loc>https://example.com/about/</loc>");
+    expect(xml).toContain("<loc>https://example.com/faq/</loc>");
+    expect(xml).toContain("<loc>https://example.com/learn/</loc>");
+    expect(xml).not.toContain("<loc>https://example.com/learn/foo</loc>");
+    // slash and no-slash variants of the same page collapse into one entry
+    expect(xml.match(/<loc>https:\/\/example\.com\/learn\/foo\/<\/loc>/g)).toHaveLength(1);
+  });
+
+  it("leaves file-like paths alone", () => {
+    const xml = buildSitemapXml(makeConfig({ trailingSlash: true }), [], [], ["/feed.xml"]);
+    expect(xml).toContain("<loc>https://example.com/feed.xml</loc>");
+  });
+
+  it("is off by default", () => {
+    const xml = buildSitemapXml(makeConfig(), pages);
+    expect(xml).toContain("<loc>https://example.com/learn/foo</loc>");
+  });
+
+  it("applies to llms.txt links", () => {
+    const out = buildLlmsTxt(makeConfig({ trailingSlash: true }), pages);
+    expect(out).toContain("(https://example.com/learn/foo/)");
+  });
+});

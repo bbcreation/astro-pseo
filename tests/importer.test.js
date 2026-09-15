@@ -75,6 +75,26 @@ describe("importCampaign", () => {
     expect(body).toContain("](/learn/pillar-one)");
   });
 
+  it("rewrites internal links with a trailing slash when configured", () => {
+    const zipPath = buildZip({
+      "pillar/pillar-one.md": PILLAR_MD,
+      "supporting/supporting-one.md": SUPPORTING_MD,
+    });
+    importCampaign({
+      zipPath,
+      projectRoot: tmpRoot,
+      config: makeConfig({ trailingSlash: true }),
+    });
+    const body = fs.readFileSync(
+      path.join(tmpRoot, "src/content/pseo/pillar/pillar-one.md"),
+      "utf8",
+    );
+    expect(body).toContain("](/learn/pillar-one/)");
+    const sitemap = fs.readFileSync(path.join(tmpRoot, "public/sitemap.xml"), "utf8");
+    expect(sitemap).toContain("<loc>https://destination.com/learn/pillar-one/</loc>");
+    expect(sitemap).toContain("<loc>https://destination.com/learn/</loc>");
+  });
+
   it("skips existing files when force is false and overwrites when true", () => {
     const zipPath = buildZip({
       "pillar/pillar-one.md": PILLAR_MD,

@@ -1,13 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { marked } from "marked";
-import { escHtml, normalizeLinkPrefix } from "./util.js";
+import { escHtml, normalizeLinkPrefix, withTrailingSlash } from "./util.js";
 
 export {
   collectPages,
   parseFrontMatter,
   DEFAULT_FIELD_MAP,
 } from "./pages.js";
+export { withTrailingSlash } from "./util.js";
 
 const SECTION_LABELS = {
   pillar: "Guides",
@@ -41,11 +42,12 @@ export function buildArticleHtml(raw) {
  * wrapper without post-processing the returned string.
  *
  * @param {Array<{slug:string,type:string,title:string,description:string}>} pages
- * @param {{linkPrefix?: string, sectionLabels?: Record<string,string>, append?: string}} [options]
+ * @param {{linkPrefix?: string, trailingSlash?: boolean, sectionLabels?: Record<string,string>, append?: string}} [options]
  * @returns {string} HTML fragment.
  */
 export function buildIndexHtml(pages, options = {}) {
   const linkPrefix = normalizeLinkPrefix(options.linkPrefix);
+  const href = (slug) => withTrailingSlash(`${linkPrefix}/${slug}`, options.trailingSlash);
   const labels = { ...SECTION_LABELS, ...(options.sectionLabels ?? {}) };
 
   let sectionsHtml = "";
@@ -57,7 +59,7 @@ export function buildIndexHtml(pages, options = {}) {
     const cards = items
       .map(
         (p) => `
-      <a href="${linkPrefix}/${escHtml(p.slug)}" class="pseo-card">
+      <a href="${escHtml(href(p.slug))}" class="pseo-card">
         <div class="pseo-card-title">${escHtml(p.title)}</div>
         ${p.description ? `<div class="pseo-card-desc">${escHtml(p.description)}</div>` : ""}
       </a>`,
@@ -91,13 +93,14 @@ export function buildIndexHtml(pages, options = {}) {
  * pages centred on current) / next, using `.pseo-pagination` classes
  * that the bundled CSS targets.
  *
- * @param {{currentPage: number, totalPages: number, linkPrefix: string}} opts
+ * @param {{currentPage: number, totalPages: number, linkPrefix: string, trailingSlash?: boolean}} opts
  * @returns {string} HTML fragment (empty string when totalPages <= 1).
  */
-export function buildPaginationHtml({ currentPage, totalPages, linkPrefix }) {
+export function buildPaginationHtml({ currentPage, totalPages, linkPrefix, trailingSlash }) {
   if (totalPages <= 1) return "";
   const prefix = normalizeLinkPrefix(linkPrefix);
-  const href = (n) => (n === 1 ? prefix : `${prefix}/p/${n}`);
+  const href = (n) =>
+    withTrailingSlash(n === 1 ? prefix : `${prefix}/p/${n}`, trailingSlash);
   const from = Math.max(1, currentPage - 2);
   const to = Math.min(totalPages, currentPage + 2);
 

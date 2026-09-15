@@ -34,6 +34,10 @@ export function definePseoConfig(config) {
  *                                        Kept outside src/content/ to avoid Astro's content-collection auto-detection.
  * @property {string} [linkPrefix]        URL prefix for imported page links (default: "/learn")
  * @property {number} [perPage]           Articles per page on the index (default: 24). Pages 2+ live at `${linkPrefix}/p/<n>`.
+ * @property {boolean} [trailingSlash]    Emit article URLs with a trailing slash (`/learn/slug/`) in the sitemap,
+ *                                        llms.txt, index/pagination links and imported markdown links. Match this
+ *                                        to how your host serves `slug/index.html` so crawlers never hit a redirect.
+ *                                        Default false.
  * @property {string} [uploadPassword]    Plain-text password for the upload panel. Leave empty to disable.
  * @property {string} [uploadPath]        URL path for the upload panel (default: "/pseo-upload")
  * @property {boolean} [contentRoutes]    Register /learn article routes. Default true.
@@ -70,6 +74,7 @@ export const DEFAULTS = {
   contentDir: "src/pseo",
   linkPrefix: "/learn",
   perPage: 24,
+  trailingSlash: false,
   uploadPassword: "",
   uploadPath: "/pseo-upload",
   contentRoutes: true,
@@ -169,6 +174,10 @@ function validate(c) {
 
   if (typeof c.sitemap.includeAstroRoutes !== "boolean") {
     throw new Error("[astro-pseo] config.sitemap.includeAstroRoutes must be a boolean.");
+  }
+
+  if (typeof c.trailingSlash !== "boolean") {
+    throw new Error("[astro-pseo] config.trailingSlash must be a boolean.");
   }
 
   if (!Number.isInteger(c.perPage) || c.perPage <= 0) {

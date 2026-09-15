@@ -8,7 +8,7 @@ import {
   buildLlmsTxt,
   buildRobotsTxt,
 } from "./generators.js";
-import { ensureDir, hostFromUrl, normalizeLinkPrefix } from "./util.js";
+import { ensureDir, hostFromUrl, normalizeLinkPrefix, withTrailingSlash } from "./util.js";
 
 /**
  * Import a pSEO campaign archive into the Astro project.
@@ -76,7 +76,7 @@ export function importCampaign(opts) {
     content = fixFrontMatter(content);
     content = stripMarkdownLinksFromFrontMatter(content);
     content = removeIncompleteMarkdownTables(content);
-    content = rewriteInternalLinks(content, slugMap, linkPrefix);
+    content = rewriteInternalLinks(content, slugMap, linkPrefix, config.trailingSlash);
 
     fs.writeFileSync(target, content, "utf8");
     stats[type] += 1;
@@ -228,10 +228,10 @@ function readFrontMatterSlug(content) {
   return m ? m[1] : null;
 }
 
-function rewriteInternalLinks(content, slugMap, linkPrefix) {
+function rewriteInternalLinks(content, slugMap, linkPrefix, trailingSlash) {
   return content.replace(/\]\(\/([\w-]+)\)/g, (_match, slug) => {
     if (slugMap[slug]) {
-      return `](${linkPrefix}/${slugMap[slug]})`;
+      return `](${withTrailingSlash(`${linkPrefix}/${slugMap[slug]}`, trailingSlash)})`;
     }
     return `](/${slug})`;
   });
@@ -327,7 +327,8 @@ function renderImportedSection(config, pages) {
   const lines = ["## Imported Pages", ""];
   for (const page of pages) {
     const desc = page.description ? `: ${page.description}` : "";
-    lines.push(`- [${page.title}](${site}${linkPrefix}/${page.slug})${desc}`);
+    const href = withTrailingSlash(`${linkPrefix}/${page.slug}`, config.trailingSlash);
+    lines.push(`- [${page.title}](${site}${href})${desc}`);
   }
   return lines.join("\n");
 }

@@ -165,21 +165,23 @@ function emitLearnIndexAstro(layoutSpecifier, configModule) {
     "learn-index.astro",
     `---
 import Layout from ${JSON.stringify(layoutImport)};
-import { collectPages, buildIndexHtml, buildPaginationHtml } from "astro-pseo/runtime";
+import { collectPages, buildIndexHtml, buildPaginationHtml, withTrailingSlash } from "astro-pseo/runtime";
 import { ADAPTIVE_CSS } from "astro-pseo/css";
 import { CONFIG } from ${JSON.stringify(configImport)};
 
 const all = collectPages(process.cwd(), CONFIG.contentDir, CONFIG.frontmatter);
 const slice = all.slice(0, CONFIG.perPage);
 const totalPages = Math.max(1, Math.ceil(all.length / CONFIG.perPage));
-const inner = buildIndexHtml(slice, { linkPrefix: CONFIG.linkPrefix });
+const inner = buildIndexHtml(slice, { linkPrefix: CONFIG.linkPrefix, trailingSlash: CONFIG.trailingSlash });
 const pagination = buildPaginationHtml({
   currentPage: 1,
   totalPages,
   linkPrefix: CONFIG.linkPrefix,
+  trailingSlash: CONFIG.trailingSlash,
 });
+const canonical = new URL(withTrailingSlash(CONFIG.linkPrefix, CONFIG.trailingSlash), CONFIG.site).toString();
 ---
-<Layout title="Articles">
+<Layout title="Articles" canonical={canonical}>
   <style is:global set:html={ADAPTIVE_CSS} />
   <Fragment set:html={inner} />
   <Fragment set:html={pagination} />
@@ -196,7 +198,7 @@ function emitLearnPageAstro(layoutSpecifier, configModule) {
     "learn-page.astro",
     `---
 import Layout from ${JSON.stringify(layoutImport)};
-import { collectPages, buildIndexHtml, buildPaginationHtml } from "astro-pseo/runtime";
+import { collectPages, buildIndexHtml, buildPaginationHtml, withTrailingSlash } from "astro-pseo/runtime";
 import { ADAPTIVE_CSS } from "astro-pseo/css";
 import { CONFIG } from ${JSON.stringify(configImport)};
 
@@ -214,14 +216,16 @@ export async function getStaticPaths() {
 const { pageNum, totalPages } = Astro.props;
 const all = collectPages(process.cwd(), CONFIG.contentDir, CONFIG.frontmatter);
 const slice = all.slice((pageNum - 1) * CONFIG.perPage, pageNum * CONFIG.perPage);
-const inner = buildIndexHtml(slice, { linkPrefix: CONFIG.linkPrefix });
+const inner = buildIndexHtml(slice, { linkPrefix: CONFIG.linkPrefix, trailingSlash: CONFIG.trailingSlash });
 const pagination = buildPaginationHtml({
   currentPage: pageNum,
   totalPages,
   linkPrefix: CONFIG.linkPrefix,
+  trailingSlash: CONFIG.trailingSlash,
 });
+const canonical = new URL(withTrailingSlash(\`\${CONFIG.linkPrefix}/p/\${pageNum}\`, CONFIG.trailingSlash), CONFIG.site).toString();
 ---
-<Layout title={\`Articles — page \${pageNum}\`}>
+<Layout title={\`Articles — page \${pageNum}\`} canonical={canonical}>
   <style is:global set:html={ADAPTIVE_CSS} />
   <Fragment set:html={inner} />
   <Fragment set:html={pagination} />
@@ -238,7 +242,7 @@ function emitLearnShowAstro(layoutSpecifier, configModule) {
     "learn-show.astro",
     `---
 import Layout from ${JSON.stringify(layoutImport)};
-import { collectPages, buildArticleHtml } from "astro-pseo/runtime";
+import { collectPages, buildArticleHtml, withTrailingSlash } from "astro-pseo/runtime";
 import { ADAPTIVE_CSS } from "astro-pseo/css";
 import { CONFIG } from ${JSON.stringify(configImport)};
 export async function getStaticPaths() {
@@ -247,11 +251,13 @@ export async function getStaticPaths() {
 }
 const { page } = Astro.props;
 const body = buildArticleHtml(page.raw);
+const canonical = new URL(withTrailingSlash(\`\${CONFIG.linkPrefix}/\${page.slug}\`, CONFIG.trailingSlash), CONFIG.site).toString();
+const indexHref = withTrailingSlash(CONFIG.linkPrefix, CONFIG.trailingSlash);
 ---
-<Layout title={page.title} description={page.description}>
+<Layout title={page.title} description={page.description} canonical={canonical} lastmod={page.updatedAt ?? undefined}>
   <style is:global set:html={ADAPTIVE_CSS} />
   <div class="pseo-wrap">
-    <a class="pseo-back" href={CONFIG.linkPrefix}>← Articles</a>
+    <a class="pseo-back" href={indexHref}>← Articles</a>
     <h1 class="pseo-h1">{page.title}</h1>
     {page.updatedAt && <div class="pseo-meta">Updated: {page.updatedAt}</div>}
     <div class="pseo-prose" set:html={body} />
