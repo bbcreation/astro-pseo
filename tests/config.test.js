@@ -122,3 +122,18 @@ describe("resolveConfig — trailingSlash", () => {
     ).toThrow(/trailingSlash must be a boolean/);
   });
 });
+
+describe("resolveConfig — articleComponent", () => {
+  it("is undefined unless supplied", () => {
+    expect(resolveConfig({ site: "https://x.com" }).articleComponent).toBeUndefined();
+    expect(
+      resolveConfig({ site: "https://x.com", articleComponent: "./src/Article.astro" }).articleComponent,
+    ).toBe("./src/Article.astro");
+  });
+
+  it("rejects non-string values", () => {
+    expect(() =>
+      resolveConfig({ site: "https://x.com", articleComponent: 42 }),
+    ).toThrow(/articleComponent must be a string/);
+  });
+});

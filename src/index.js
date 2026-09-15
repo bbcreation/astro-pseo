@@ -107,7 +107,8 @@ function registerContentRoutes({ injectRoute, config, rootPath, logger }) {
   const configModule = emitConfigModule(config);
   const indexFile = emitLearnIndexAstro(layoutSpecifier, configModule);
   const pageFile = emitLearnPageAstro(layoutSpecifier, configModule);
-  const showFile = emitLearnShowAstro(layoutSpecifier, configModule);
+  const articleSpecifier = resolveArticleSpecifier(config, rootPath);
+  const showFile = emitLearnShowAstro(layoutSpecifier, configModule, articleSpecifier);
 
   injectRoute({ pattern: linkPrefix, entrypoint: indexFile, prerender: true });
   injectRoute({
@@ -234,34 +235,44 @@ const canonical = new URL(withTrailingSlash(\`\${CONFIG.linkPrefix}/p/\${pageNum
   );
 }
 
-function emitLearnShowAstro(layoutSpecifier, configModule) {
+function emitLearnShowAstro(layoutSpecifier, configModule, articleSpecifier) {
   const filePath = path.join(path.resolve(process.cwd(), CACHE_DIR), "learn-show.astro");
   const layoutImport = importPath(layoutSpecifier, filePath);
   const configImport = importPath(configModule, filePath);
+  const articleImport = articleSpecifier ? importPath(articleSpecifier, filePath) : null;
+
+  const articleMarkup = articleImport
+    ? `<Article page={light(page)} body={body} canonical={canonical} indexHref={indexHref} pages={pages} />`
+    : `<div class="pseo-wrap">
+    <a class="pseo-back" href={indexHref}>← Articles</a>
+    <h1 class="pseo-h1">{page.title}</h1>
+    {page.updatedAt && <div class="pseo-meta">Updated: {page.updatedAt}</div>}
+    <div class="pseo-prose" set:html={body} />
+  </div>`;
+
   return writeCacheFile(
     "learn-show.astro",
     `---
 import Layout from ${JSON.stringify(layoutImport)};
+${articleImport ? `import Article from ${JSON.stringify(articleImport)};` : ""}
 import { collectPages, buildArticleHtml, withTrailingSlash } from "astro-pseo/runtime";
 import { ADAPTIVE_CSS } from "astro-pseo/css";
 import { CONFIG } from ${JSON.stringify(configImport)};
+const light = ({ raw, ...rest }) => rest;
 export async function getStaticPaths() {
-  const pages = collectPages(process.cwd(), CONFIG.contentDir, CONFIG.frontmatter);
-  return pages.map((p) => ({ params: { slug: p.slug }, props: { page: p } }));
+  const all = collectPages(process.cwd(), CONFIG.contentDir, CONFIG.frontmatter);
+  // one shared light list (no markdown bodies) for related-content blocks
+  const pages = all.map(light);
+  return all.map((p) => ({ params: { slug: p.slug }, props: { page: p, pages } }));
 }
-const { page } = Astro.props;
+const { page, pages } = Astro.props;
 const body = buildArticleHtml(page.raw);
 const canonical = new URL(withTrailingSlash(\`\${CONFIG.linkPrefix}/\${page.slug}\`, CONFIG.trailingSlash), CONFIG.site).toString();
 const indexHref = withTrailingSlash(CONFIG.linkPrefix, CONFIG.trailingSlash);
 ---
 <Layout title={page.title} description={page.description} canonical={canonical} lastmod={page.updatedAt ?? undefined}>
   <style is:global set:html={ADAPTIVE_CSS} />
-  <div class="pseo-wrap">
-    <a class="pseo-back" href={indexHref}>← Articles</a>
-    <h1 class="pseo-h1">{page.title}</h1>
-    {page.updatedAt && <div class="pseo-meta">Updated: {page.updatedAt}</div>}
-    <div class="pseo-prose" set:html={body} />
-  </div>
+  ${articleMarkup}
 </Layout>
 `,
   );
@@ -279,6 +290,19 @@ function resolveLayoutSpecifier(config, rootPath) {
   if (!fs.existsSync(abs)) {
     throw new Error(
       `[astro-pseo] config.layout points to a file that does not exist: ${abs}`,
+    );
+  }
+  return abs;
+}
+
+function resolveArticleSpecifier(config, rootPath) {
+  if (config.articleComponent == null) {
+    return null;
+  }
+  const abs = path.resolve(rootPath, config.articleComponent);
+  if (!fs.existsSync(abs)) {
+    throw new Error(
+      `[astro-pseo] config.articleComponent points to a file that does not exist: ${abs}`,
     );
   }
   return abs;

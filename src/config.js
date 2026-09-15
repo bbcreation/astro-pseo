@@ -42,6 +42,11 @@ export function definePseoConfig(config) {
  * @property {string} [uploadPath]        URL path for the upload panel (default: "/pseo-upload")
  * @property {boolean} [contentRoutes]    Register /learn article routes. Default true.
  * @property {string} [layout]            Path to a custom Astro layout (relative to project root). Default: built-in adaptive layout.
+ * @property {string} [articleComponent]  Path to an Astro component that renders the article body inside the layout.
+ *                                        Receives props: `page` ({slug,type,title,description,updatedAt,tags}),
+ *                                        `body` (rendered HTML), `canonical`, `indexHref`, and `pages` (light
+ *                                        descriptors of every article, for related-content blocks).
+ *                                        Default: built-in markup (back link, h1, updated date, body).
  * @property {Partial<FrontmatterMap>} [frontmatter]  Mapping of logical fields to frontmatter key names.
  * @property {Object} [outputs]
  * @property {boolean} [outputs.robots]   Default true
@@ -125,6 +130,9 @@ export function resolveConfig(user) {
   if (u.layout != null) {
     merged.layout = u.layout;
   }
+  if (u.articleComponent != null) {
+    merged.articleComponent = u.articleComponent;
+  }
 
   validate(merged);
 
@@ -146,6 +154,10 @@ function validate(c) {
 
   if (c.layout !== undefined && typeof c.layout !== "string") {
     throw new Error("[astro-pseo] config.layout must be a string path or omitted.");
+  }
+
+  if (c.articleComponent !== undefined && typeof c.articleComponent !== "string") {
+    throw new Error("[astro-pseo] config.articleComponent must be a string path or omitted.");
   }
 
   if (typeof c.frontmatter !== "object" || c.frontmatter === null) {

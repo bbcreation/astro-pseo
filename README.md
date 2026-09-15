@@ -109,6 +109,34 @@ yourself and skip the auto-inject by writing fully bespoke pages:
 import { ADAPTIVE_CSS } from "astro-pseo/css";
 ```
 
+## Custom article component
+
+By default an article renders as back link + `<h1>` + updated date + body.
+To add your own chrome (calls to action, related articles, author box) set
+`articleComponent` to an Astro component; it is rendered inside your layout
+in place of the default markup:
+
+```js
+export default definePseoConfig({
+  site: "https://example.com",
+  layout: "./src/layouts/Layout.astro",
+  articleComponent: "./src/components/Article.astro",
+});
+```
+
+```astro
+---
+// src/components/Article.astro
+const { page, body, canonical, indexHref, pages } = Astro.props;
+// page:   { slug, type, title, description, updatedAt, tags }
+// body:   rendered article HTML
+// pages:  the same shape as `page`, for every article (for related lists)
+---
+<a href={indexHref}>← Articles</a>
+<h1>{page.title}</h1>
+<div set:html={body} />
+```
+
 ## Frontmatter mapping
 
 Default keys: `title`, `meta_description`, `focus_keyword`, `updated_at`,
@@ -199,6 +227,7 @@ needs SSR — configure an Astro adapter and set `output: "server"` or
 | `perPage` | `number` | `24` | Articles per page on the index. Pages 2+ live at `${linkPrefix}/p/<n>`. |
 | `trailingSlash` | `boolean` | `false` | Emit `/learn/slug/` (with slash) in the sitemap, `llms.txt`, index/pagination links and imported markdown links. Turn on when your host serves `slug/index.html` and 301s `/slug` → `/slug/` (nginx, Apache, most static hosts) so crawlers never land on a redirect. |
 | `layout` | `string \| undefined` | built-in | Path (relative to root) of your Layout.astro. |
+| `articleComponent` | `string \| undefined` | built-in | Path (relative to root) of a component rendering the article inside the layout. |
 | `frontmatter` | `Partial<FrontmatterMap>` | pSEO defaults | Logical-field → frontmatter-key map. |
 | `uploadPassword` | `string` | `""` | Empty = upload panel disabled. |
 | `uploadPath` | `string` | `"/pseo-upload"` | URL path for the upload panel. |
